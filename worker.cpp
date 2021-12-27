@@ -1,13 +1,9 @@
 #include "worker.h"
 
-Worker::Worker(int id, int total_processing_steps) : id_(id), total_processing_steps_(total_processing_steps) {}
+Worker::Worker(int id) : id_(id) {}
 
 Worker::~Worker() {
 
-}
-
-int Worker::progress() const {
-    return 0;
 }
 
 void Worker::pause() {
@@ -20,6 +16,13 @@ void Worker::restart() {
 
 void Worker::stop() {
 
+}
+
+void Worker::set_progress(int progress) {
+    if (progress < 0 || progress > 100) {
+        throw std::domain_error("Progress is outside the 0-100 range");
+    }
+    progress_ = progress;
 }
 
 std::ostream& operator<<(std::ostream& os, Worker& worker) {

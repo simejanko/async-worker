@@ -16,9 +16,8 @@ public:
     /**
      * Constructs worker and begins it's execution
      * @param id number to identify this worker by
-     * @param total_processing_steps number of high-level processing steps this worker consists of (used to track progress)
      */
-    Worker(int id, int total_processing_steps);
+    explicit Worker(int id);
 
     virtual ~Worker();
 
@@ -34,7 +33,7 @@ public:
     [[nodiscard]] int id() const { return id_; }
 
     /** @return worker's progress, in the 0-100 range (percentage) */
-    [[nodiscard]] int progress() const;
+    [[nodiscard]] int progress() const { return progress_; };
 
     /**
      * Pauses worker
@@ -54,6 +53,13 @@ public:
     */
     void stop();
 
+protected:
+    /**
+     * Sets worker's progress, in the 0-100 range (percentage)
+     * @throws std::domain_error if progress passed is not in the 0-100 range
+     */
+    void set_progress(int progress);
+
 private:
     /** Where the actual work that's to be run in separate thread is implemented. */
     virtual void work() = 0;
@@ -62,9 +68,7 @@ private:
     std::thread thread_;
     Status status_ = Status::RUNNING;
 
-    // progress members
-    int total_processing_steps_ = 1;
-    int completed_steps_ = 0;
+    int progress_ = 0; // in percentages (0-100)
 
 };
 
