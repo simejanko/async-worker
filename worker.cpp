@@ -1,11 +1,12 @@
 #include "worker.h"
 
-Worker::Worker(int id) : id_(id) {}
+Worker::Worker(int id) : id_(id), thread_(&Worker::work, this) {}
 
 Worker::~Worker() {
     try {
         stop();
     } catch (std::logic_error& e) { // worker has already finished, swallow
+    } catch (std::system_error& e) { // mutex exception, don't propagate
     }
 }
 
@@ -28,7 +29,7 @@ void Worker::restart() {
     }
 
     status_change_ = Status::RUNNING;
-    status_cv_.notify_one(); //TODO: check if this is ok, without manually unlocking prior
+    status_cv_.notify_one();
 
     // wait for restart to happen or for worker to finish
     status_cv_.wait(lock, [this]() { return status_ == Status::RUNNING || status_ == Status::FINISHED; });
@@ -74,6 +75,35 @@ void Worker::set_progress(int progress) {
     progress_ = progress;
 }
 
+void Worker::work() {
+    do_work();
+
+    std::lock_guard<std::mutex> lock(status_m_);
+    // worker could've finished or was stopped
+    status_ = status_change_ != Status::STOPPED ? Status::FINISHED : Status::STOPPED;
+}
+
+std::ostream& operator<<(std::ostream& os, Worker::Status status) {
+    switch (status) {
+        case Worker::Status::RUNNING:
+            return os << "running";
+        case Worker::Status::PAUSED:
+            return os << "paused";
+        case Worker::Status::STOPPED:
+            return os << "stopped";
+        case Worker::Status::FINISHED:
+            return os << "finished";
+    }
+
+    throw std::domain_error("status does not have string conversion");
+}
+
 std::ostream& operator<<(std::ostream& os, Worker& worker) {
-    return os << worker.id();
+    auto worker_status = worker.status();
+    os << "Worker " << worker.id() << " - " << worker_status;
+
+    if (worker_status == Worker::Status::RUNNING || worker_status == Worker::Status::PAUSED) {
+        os << "(" << worker.progress() << "% done)";
+    }
+    return os;
 }
