@@ -1,6 +1,6 @@
 #include "worker.h"
 
-Worker::Worker(int id) : id_(id), thread_(&Worker::work, this) {}
+Worker::Worker() : thread_(&Worker::work, this) {}
 
 Worker::~Worker() {
     try {
@@ -100,7 +100,7 @@ std::ostream& operator<<(std::ostream& os, Worker::Status status) {
 
 std::ostream& operator<<(std::ostream& os, Worker& worker) {
     auto worker_status = worker.status();
-    os << "Worker " << worker.id() << " - " << worker_status;
+    os << typeid(worker).name() << " - " << worker_status;
 
     if (worker_status == Worker::Status::RUNNING || worker_status == Worker::Status::PAUSED) {
         os << "(" << worker.progress() << "% done)";

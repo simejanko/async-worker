@@ -7,6 +7,7 @@
 #include <condition_variable>
 #include <optional>
 
+//TODO: perhaps add result/inputs as well (template?), perhaps with the use of async instead of thread
 /**
  * Abstract class for async workers implemented with std::thread_ that can be safely paused, restarted, stopped and destroyed.
  * Subclasses should implement work() method and regularly call status_update() method inside (see method docstrings for details).
@@ -18,11 +19,8 @@ public:
         RUNNING, PAUSED, STOPPED, FINISHED
     };
 
-    /**
-     * Constructs worker and begins it's execution
-     * @param id number to identify this worker by
-     */
-    explicit Worker(int id);
+    /** Constructs worker and begins it's execution */
+    Worker();
 
     virtual ~Worker();
 
@@ -36,9 +34,6 @@ public:
         std::lock_guard<std::mutex> lock(status_m_);
         return status_;
     }
-
-    /** @return number to identify this worker by */
-    [[nodiscard]] int id() const { return id_; }
 
     /** @return worker's progress, in the 0-100 range (percentage) */
     [[nodiscard]] int progress() const { return progress_; };
@@ -85,7 +80,6 @@ private:
     /** Where the actual work that's to be run in separate thread is implemented. */
     virtual void do_work() = 0;
 
-    int id_ = -1; // TODO: should it be part of the class? What's its use here?
     Status status_ = Status::RUNNING; // TODO: think about using atomic for this and status_change_ and relieving some of the locking
     std::atomic<int> progress_ = 0; // in percentages (0-100)
 
