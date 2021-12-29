@@ -10,8 +10,7 @@
 //TODO: perhaps add result/inputs as well (template?), perhaps with the use of async instead of thread
 /**
  * Abstract class for async workers implemented with std::thread_ that can be safely paused, restarted, stopped and destroyed.
- * Subclasses should implement work() method and regularly call status_update() method inside (see method docstrings for details).
- * It is assumed the Worker object is controlled from a single thread.
+ * Subclasses should implement do_work() method and regularly call yield() method (see docstrings for details).
  */
 class Worker {
 public:
@@ -58,12 +57,13 @@ public:
 
 protected:
     /**
+     * Called by worker implementation (inside do_work method) to yield execution control.
      * Sleeps in case worker should be paused and checks if worker needs to stop.
-     * Good worker implementations should should call this regularly (inside do_work method)
+     * Good worker implementations should should call this regularly
      * while still keeping in mind the overhead of this call (most notably the mutex lock)
      * @return boolean indicating whether the worker should cleanly stop (true) or keep running (false)
      */
-    bool status_update();
+    bool yield();
 
     /**
      * Publishes worker's progress.

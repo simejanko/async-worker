@@ -48,11 +48,11 @@ void Worker::stop() {
     thread_.join();
 }
 
-bool Worker::status_update() {
+bool Worker::yield() {
     std::unique_lock<std::mutex> lock(status_m_);
     if (status_change_ == Status::PAUSED) {
-        status_ = Status::PAUSED;
         status_change_.reset();
+        status_ = Status::PAUSED;
         // notify of the status change
         status_cv_.notify_one();
         // sleep until restart or stop is requested
