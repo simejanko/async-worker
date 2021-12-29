@@ -15,6 +15,7 @@ enum class WorkerStatus {
     RUNNING, PAUSED, STOPPED, FINISHED
 };
 
+// function type for yielding execution from worker function to Worker (see Worker::yield)
 using yield_function_t = std::function<bool(int)>;
 
 /**
@@ -67,7 +68,7 @@ public:
     //TODO: function for obtaining result
 
 private:
-    // infer Function return type (notice the extra yield function argument)
+    // infer Function return type (notice the extra yield function argument that Function must accept)
     using function_return_t = std::invoke_result_t<std::decay_t<Function>, yield_function_t, std::decay_t<Args>...>;
 
     /** Wrapper worker method that's to be run in separate thread by std::async */
