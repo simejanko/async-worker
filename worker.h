@@ -19,13 +19,17 @@ enum class WorkerStatus {
 using yield_function_t = std::function<bool(int)>;
 
 /**
- * Async worker that can be safely paused, restarted, stopped and destroyed.
+ * Async worker that can be paused, restarted, stopped and destroyed.
  * Implemented by wrapping std::async - always run in separate thread.
+ * Assumed to be controlled from a single thread.
  * @tparam Function function type (see std::async)
  * @tparam Args function arguments (see std::async)
  */
 template<class Function, class... Args>
 class Worker {
+    // infer Function return type (notice the extra yield function argument that Function must accept)
+    using function_return_t = std::invoke_result_t<std::decay_t<Function>, yield_function_t, std::decay_t<Args>...>;
+
 public:
     /**
      * Constructs worker from passed function & arguments (excluding the first argument - yield function)
@@ -39,14 +43,25 @@ public:
 
     Worker& operator=(Worker& other) = delete;
 
-    /** @return worker status (e.g. running, paused, ...) */
+    /** Returns worker status (e.g. running, paused, ...) */
     [[nodiscard]] WorkerStatus status() const {
         std::lock_guard<std::mutex> lock(status_m_);
         return status_;
     }
 
-    /** @return worker's progress, in the 0-100 range (percentage) */
+    /** Returns worker's progress, in the 0-100 range (percentage) */
     [[nodiscard]] int progress() const { return progress_; };
+
+    /** Returns worker function result. Blocks until the result is available.
+     * As this is wrapper for std::future::get, result can only be obtained once.
+     * @throws std::future_error if future state is invalid (e.g. result already obtained)
+     */
+    function_return_t result() {
+        if (!future_.valid()) { // explicitly checked & thrown since not all implementations throw exception
+            throw std::future_error(std::future_errc::no_state);
+        }
+        return future_.get();
+    }
 
     /**
      * Pauses worker (blocking call)
@@ -65,11 +80,8 @@ public:
     * @throws std::logic_error if worker has already finished it's work
     */
     void stop();
-    //TODO: function for obtaining result
 
 private:
-    // infer Function return type (notice the extra yield function argument that Function must accept)
-    using function_return_t = std::invoke_result_t<std::decay_t<Function>, yield_function_t, std::decay_t<Args>...>;
 
     /** Wrapper worker method that's to be run in separate thread by std::async */
     function_return_t work(Function&& f, Args&& ... args);
