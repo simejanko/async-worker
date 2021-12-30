@@ -16,13 +16,13 @@ namespace worker {
     };
 
     /**
-     * Abstract base async worker class that can be paused, restarted, stopped and destroyed.
-     * It's instances must be controlled (e.g. paused, restarted) from a single thread
+     * Abstract base worker class that can be paused, restarted, stopped and destroyed.
+     * Instances must be controlled (e.g. paused, restarted) from a single thread
      */
     class BaseWorker {
     public:
         BaseWorker() = default; // explicit default since copy-constructor is explicitly deleted
-        virtual ~BaseWorker() = default;
+        virtual ~BaseWorker() = 0; // abstract class
 
         // non-copyable
         BaseWorker(const BaseWorker& other) = delete;
@@ -51,18 +51,18 @@ namespace worker {
         void restart();
 
         /**
-        * Stops worker (blocking call). Worker can't be restarted after it is stopped
+        * Stops worker (blocking call). AsyncWorker can't be restarted after it is stopped
         * @throws std::logic_error if worker has already finished it's work
         */
         void stop();
 
         /** Waits for worker to finish/stop. */
-        virtual void wait() = 0;
+        virtual void wait();
 
     protected:
         /**
         * Must be called in a worker thread when it can yield control of execution.
-        * Sleeps in case worker should be paused and checks if worker needs to stop.
+        * Sleeps in case worker should be paused (until resumed) and checks if worker needs to stop.
         * Also used to publish worker's progress.
         * Good implementations should should call this regularly
         * while still keeping in mind the overhead of this call (most notably the mutex lock)
@@ -98,23 +98,22 @@ namespace worker {
     /**
      * Async worker that can be paused, restarted, stopped, destroyed and returns result.
      * Implemented by wrapping std::async - always run in separate thread.
-     * @tparam Function function type (see std::async)
-     * @tparam Args function arguments (see std::async)
+     * @tparam Function function type (see std::async). The main difference with std::async interface is
+     *   that the function must accept yield function (yield_function_t) as it's first argument (see BaseWorker::yield).
+     *   That is: function determines when it can yield execution by calling yield function inside it's own implementation.
+     * @tparam Args function arguments (see std::async). Excludes the first mandatory argument - yield function.
      */
     template<class Function, class... Args>
-    class Worker : public BaseWorker {
+    class AsyncWorker : public BaseWorker {
         // infer Function return type (notice the extra yield function argument that Function must accept)
         using function_return_t = std::invoke_result_t<std::decay_t<Function>, yield_function_t, std::decay_t<Args>...>;
 
     public:
-        /**
-         * Constructs worker from passed function & arguments (excluding the first argument - yield function)
-         * and begins it's execution. The only requirement for passed functions is that it accepts yield function
-         * as it's first argument. See yield member function docstring for details.
-         */
-        explicit Worker(Function&& f, Args&& ... args);
+        /** Constructs worker from passed function & arguments */
+        explicit AsyncWorker(Function&& f, Args&& ... args);
 
-        /** Returns worker's result. Blocks until the result is available (worker finished or stopped).
+        /**
+         * Returns worker's result. Blocks until the result is available (worker finished or stopped).
          * As this is wrapper for std::future::get, result can only be obtained once.
          * @throws std::future_error if future state is invalid (e.g. result already obtained)
          */
@@ -125,19 +124,8 @@ namespace worker {
             return future_.get();
         }
 
-        /** Waits for worker to finish/stop.
-         * As this is wrapper for std::future::wait, it shouldn't be called after worker's result has been obtained.
-         * @throws std::future_error if future state is invalid (e.g. result already obtained)
-         */
-        void wait() override {
-            if (!future_.valid()) { // explicitly checked & thrown since not all implementations throw exception
-                throw std::future_error(std::future_errc::no_state);
-            }
-            future_.wait();
-        }
-
     private:
-        /** Wrapper method that's to be run in separate thread by std::async */
+        /** Wrapper method that's run in separate thread by std::async */
         function_return_t work(Function&& f, Args&& ... args);
 
         std::future<function_return_t> future_;
@@ -159,8 +147,7 @@ namespace worker {
         status_change_ = Status::PAUSED;
 
         // wait for pause to happen or for worker to finish
-        status_cv_.wait(lock,
-                        [this]() { return status_ == Status::PAUSED || status_ == Status::FINISHED; });
+        status_cv_.wait(lock, [this]() { return status_ == Status::PAUSED || status_ == Status::FINISHED; });
     }
 
     void BaseWorker::restart() {
@@ -170,11 +157,11 @@ namespace worker {
         }
 
         status_change_ = Status::RUNNING;
+        // notify sleeping worker
         status_cv_.notify_one();
 
         // wait for restart to happen or for worker to finish
-        status_cv_.wait(lock,
-                        [this]() { return status_ == Status::RUNNING || status_ == Status::FINISHED; });
+        status_cv_.wait(lock, [this]() { return status_ == Status::RUNNING || status_ == Status::FINISHED; });
     }
 
     void BaseWorker::stop() {
@@ -184,11 +171,17 @@ namespace worker {
         }
 
         status_change_ = Status::STOPPED;
+        // notify potentially sleeping worker
         status_cv_.notify_one();
-        lock.unlock();
 
-        // wait for worker to finish/stop
-        wait();
+        // wait for worker to stop or finish
+        status_cv_.wait(lock,[this]() { return status_ == Status::STOPPED || status_ == Status::FINISHED; });
+    }
+
+
+    void BaseWorker::wait() {
+        std::unique_lock<std::mutex> lock(status_m_);
+        status_cv_.wait(lock,[this]() { return status_ == Status::STOPPED || status_ == Status::FINISHED; });
     }
 
     bool BaseWorker::yield(double progress) {
@@ -226,17 +219,19 @@ namespace worker {
         if (status_ == Status::FINISHED) {
             set_progress(1);
         }
+        // notify of the status change
+        status_cv_.notify_one();
     }
 
     template<class Function, class... Args>
-    Worker<Function, Args...>::Worker(Function&& f, Args&& ... args)  : future_(
-            std::async(std::launch::async, &Worker::work, this, f, std::forward<Args>(args)...)) {}
+    AsyncWorker<Function, Args...>::AsyncWorker(Function&& f, Args&& ... args)  : future_(
+            std::async(std::launch::async, &AsyncWorker::work, this, f, std::forward<Args>(args)...)) {}
 
     template<class Function, class... Args>
-    typename Worker<Function, Args...>::function_return_t
-    Worker<Function, Args...>::work(Function&& f, Args&& ... args) {
+    typename AsyncWorker<Function, Args...>::function_return_t
+    AsyncWorker<Function, Args...>::work(Function&& f, Args&& ... args) {
         // yield function that's to be passed to worker function
-        auto yield_func = std::bind(&Worker::yield, this, std::placeholders::_1);
+        auto yield_func = std::bind(&AsyncWorker::yield, this, std::placeholders::_1);
 
         // void return type needs to be handled separately
         if constexpr(std::is_same_v<function_return_t, void>) {
