@@ -15,33 +15,19 @@ namespace worker {
         RUNNING, PAUSED, STOPPED, FINISHED
     };
 
-    // function type for yielding execution from worker (see Worker::yield)
-    using yield_function_t = std::function<bool(int)>;
-
     /**
-     * Async worker that can be paused, restarted, stopped and destroyed.
-     * Implemented by wrapping std::async - always run in separate thread.
-     * Worker instance must be controlled by a single thread.
-     * @tparam Function function type (see std::async)
-     * @tparam Args function arguments (see std::async)
+     * Abstract base async worker class that can be paused, restarted, stopped and destroyed.
+     * It's instances must be controlled (e.g. paused, restarted) from a single thread
      */
-    template<class Function, class... Args>
-    class Worker {
-        // infer Function return type (notice the extra yield function argument that Function must accept)
-        using function_return_t = std::invoke_result_t<std::decay_t<Function>, yield_function_t, std::decay_t<Args>...>;
-
+    class BaseWorker {
     public:
-        /**
-         * Constructs worker from passed function & arguments (excluding the first argument - yield function)
-         * and begins it's execution. The only requirement for passed functions is that it accepts yield function
-         * as it's first argument. See yield member function docstring for details.
-         */
-        explicit Worker(Function&& f, Args&& ... args);
+        BaseWorker() = default; // explicit default since copy-constructor is explicitly deleted
+        virtual ~BaseWorker() = default;
 
         // non-copyable
-        Worker(const Worker& other) = delete;
+        BaseWorker(const BaseWorker& other) = delete;
 
-        Worker& operator=(Worker& other) = delete;
+        BaseWorker& operator=(BaseWorker& other) = delete;
 
         /** Returns worker status (e.g. running, paused, ...) */
         [[nodiscard]] Status status() const {
@@ -51,17 +37,6 @@ namespace worker {
 
         /** Returns worker's progress, in the 0-1 range (0%-100%) */
         [[nodiscard]] double progress() const { return progress_; };
-
-        /** Returns worker's result. Blocks until the result is available (worker finished or stopped).
-         * As this is wrapper for std::future::get, result can only be obtained once.
-         * @throws std::future_error if future state is invalid (e.g. result already obtained)
-         */
-        function_return_t result() {
-            if (!future_.valid()) { // explicitly checked & thrown since not all implementations throw exception
-                throw std::future_error(std::future_errc::no_state);
-            }
-            return future_.get();
-        }
 
         /**
          * Pauses worker (blocking call)
@@ -81,55 +56,101 @@ namespace worker {
         */
         void stop();
 
-    private:
+        /** Waits for worker to finish/stop. */
+        virtual void wait() = 0;
 
-        /** Wrapper method that's to be run in separate thread by std::async */
-        function_return_t work(Function&& f, Args&& ... args);
-
-        /** Called after worker function exits. Changes state to stopped or finished depending on the type of exit */
-        void worker_fun_stopped();
-
+    protected:
         /**
-         * Called by worker function (passed in constructor) to yield control of execution.
-         * Sleeps in case worker should be paused and checks if worker needs to stop.
-         * Also used to publish worker's progress.
-         * Good worker functions should should call this regularly
-         * while still keeping in mind the overhead of this call (most notably the mutex lock)
-         * @param progress worker's updated progress, in the 0-1 range (0%-100%)
-         * @return boolean indicating whether the worker should cleanly stop (true) or keep running (false)
-         */
+        * Must be called in a worker thread when it can yield control of execution.
+        * Sleeps in case worker should be paused and checks if worker needs to stop.
+        * Also used to publish worker's progress.
+        * Good implementations should should call this regularly
+        * while still keeping in mind the overhead of this call (most notably the mutex lock)
+        * @param progress worker's updated progress, in the 0-1 range (0%-100%)
+        * @return boolean indicating whether the worker should cleanly stop (true) or keep running (false)
+        */
         bool yield(double progress);
 
         /**
          * Set worker's progress. Clamped to the valid range.
          * @param progress worker's updated progress, in the 0-1 range (0%-100%)
          */
-        void set_progress(double progress);
+        void set_progress(double progress) { progress_ = std::clamp(progress, 0., 1.); }
 
+        /**
+         * Needs to be called by implementations when worker is done.
+         * Changes state to stopped or finished depending on the type of exit.
+         */
+        void worker_done();
+
+    private:
         Status status_ = Status::RUNNING;
         std::atomic<double> progress_ = 0; // in percentages (0-1)
-
-        std::future<function_return_t> future_;
 
         std::optional<Status> status_change_; // scheduled status change
         mutable std::mutex status_m_; // mutex for accessing worker status
         mutable std::condition_variable status_cv_; // conditional variable for changing worker status
     };
 
+    // function type for yielding execution from worker (see BaseWorker::yield)
+    using yield_function_t = std::function<bool(double)>;
+
+    /**
+     * Async worker that can be paused, restarted, stopped, destroyed and returns result.
+     * Implemented by wrapping std::async - always run in separate thread.
+     * @tparam Function function type (see std::async)
+     * @tparam Args function arguments (see std::async)
+     */
+    template<class Function, class... Args>
+    class Worker : public BaseWorker {
+        // infer Function return type (notice the extra yield function argument that Function must accept)
+        using function_return_t = std::invoke_result_t<std::decay_t<Function>, yield_function_t, std::decay_t<Args>...>;
+
+    public:
+        /**
+         * Constructs worker from passed function & arguments (excluding the first argument - yield function)
+         * and begins it's execution. The only requirement for passed functions is that it accepts yield function
+         * as it's first argument. See yield member function docstring for details.
+         */
+        explicit Worker(Function&& f, Args&& ... args);
+
+        /** Returns worker's result. Blocks until the result is available (worker finished or stopped).
+         * As this is wrapper for std::future::get, result can only be obtained once.
+         * @throws std::future_error if future state is invalid (e.g. result already obtained)
+         */
+        function_return_t result() {
+            if (!future_.valid()) { // explicitly checked & thrown since not all implementations throw exception
+                throw std::future_error(std::future_errc::no_state);
+            }
+            return future_.get();
+        }
+
+        /** Waits for worker to finish/stop.
+         * As this is wrapper for std::future::wait, it shouldn't be called after worker's result has been obtained.
+         * @throws std::future_error if future state is invalid (e.g. result already obtained)
+         */
+        void wait() override {
+            if (!future_.valid()) { // explicitly checked & thrown since not all implementations throw exception
+                throw std::future_error(std::future_errc::no_state);
+            }
+            future_.wait();
+        }
+
+    private:
+        /** Wrapper method that's to be run in separate thread by std::async */
+        function_return_t work(Function&& f, Args&& ... args);
+
+        std::future<function_return_t> future_;
+    };
+
     /** @throws std::domain_error if no string conversion for passed status */
     std::ostream& operator<<(std::ostream& os, Status status);
 
-    template<class Function, class... Args>
-    std::ostream& operator<<(std::ostream& os, Worker<Function, Args...>& worker);
+    std::ostream& operator<<(std::ostream& os, BaseWorker& worker);
 
 
-    // ******* Template implementations ********************************************
-    template<class Function, class... Args>
-    Worker<Function, Args...>::Worker(Function&& f, Args&& ... args)  : future_(
-            std::async(std::launch::async, &Worker::work, this, f, std::forward<Args>(args)...)) {}
-
-    template<class Function, class... Args>
-    void Worker<Function, Args...>::pause() {
+    // ******* Implementations ********************************************
+    void BaseWorker::pause() {
         std::unique_lock<std::mutex> lock(status_m_);
         if (status_ != Status::RUNNING) {
             throw std::logic_error("Worker must be running to preform pause action");
@@ -142,8 +163,7 @@ namespace worker {
                         [this]() { return status_ == Status::PAUSED || status_ == Status::FINISHED; });
     }
 
-    template<class Function, class... Args>
-    void Worker<Function, Args...>::restart() {
+    void BaseWorker::restart() {
         std::unique_lock<std::mutex> lock(status_m_);
         if (status_ != Status::PAUSED) {
             throw std::logic_error("Worker must be paused to preform restart action");
@@ -157,8 +177,7 @@ namespace worker {
                         [this]() { return status_ == Status::RUNNING || status_ == Status::FINISHED; });
     }
 
-    template<class Function, class... Args>
-    void Worker<Function, Args...>::stop() {
+    void BaseWorker::stop() {
         std::unique_lock<std::mutex> lock(status_m_);
         if (status_ != Status::RUNNING && status_ != Status::PAUSED) {
             throw std::logic_error("Worker must be running or paused to preform stop action");
@@ -168,43 +187,11 @@ namespace worker {
         status_cv_.notify_one();
         lock.unlock();
 
-        // wait for async task to finish
-        future_.wait();
+        // wait for worker to finish/stop
+        wait();
     }
 
-    template<class Function, class... Args>
-    typename Worker<Function, Args...>::function_return_t
-    Worker<Function, Args...>::work(Function&& f, Args&& ... args) {
-        // yield function that's to be passed to worker function
-        auto yield_func = std::bind(&Worker::yield, this, std::placeholders::_1);
-
-        // void return type needs to be handled separately
-        if constexpr(std::is_same_v<function_return_t, void>) {
-            f(yield_func, std::forward<Args>(args)...);
-            worker_fun_stopped();
-            return;
-        }
-        else {
-            function_return_t ret = f(yield_func, std::forward<Args>(args)...);
-            worker_fun_stopped();
-            return ret;
-        }
-    }
-
-    template<class Function, class... Args>
-    void Worker<Function, Args...>::worker_fun_stopped() {
-        std::lock_guard<std::mutex> lock(status_m_);
-        // worker could've finished or was stopped
-        status_ = status_change_ != Status::STOPPED ? Status::FINISHED : Status::STOPPED;
-
-        // force 100% progress if worker finished
-        if (status_ == Status::FINISHED) {
-            set_progress(1);
-        }
-    }
-
-    template<class Function, class... Args>
-    bool Worker<Function, Args...>::yield(double progress) {
+    bool BaseWorker::yield(double progress) {
         set_progress(progress);
 
         std::unique_lock<std::mutex> lock(status_m_);
@@ -230,9 +217,38 @@ namespace worker {
         return true;
     }
 
+    void BaseWorker::worker_done() {
+        std::lock_guard<std::mutex> lock(status_m_);
+        // worker could've finished or was stopped
+        status_ = status_change_ != Status::STOPPED ? Status::FINISHED : Status::STOPPED;
+
+        // force 100% progress if worker finished
+        if (status_ == Status::FINISHED) {
+            set_progress(1);
+        }
+    }
+
     template<class Function, class... Args>
-    void Worker<Function, Args...>::set_progress(double progress) {
-        progress_ = std::clamp(progress, 0., 1.);
+    Worker<Function, Args...>::Worker(Function&& f, Args&& ... args)  : future_(
+            std::async(std::launch::async, &Worker::work, this, f, std::forward<Args>(args)...)) {}
+
+    template<class Function, class... Args>
+    typename Worker<Function, Args...>::function_return_t
+    Worker<Function, Args...>::work(Function&& f, Args&& ... args) {
+        // yield function that's to be passed to worker function
+        auto yield_func = std::bind(&Worker::yield, this, std::placeholders::_1);
+
+        // void return type needs to be handled separately
+        if constexpr(std::is_same_v<function_return_t, void>) {
+            f(yield_func, std::forward<Args>(args)...);
+            worker_done();
+            return;
+        }
+        else {
+            function_return_t ret = f(yield_func, std::forward<Args>(args)...);
+            worker_done();
+            return ret;
+        }
     }
 
     std::ostream& operator<<(std::ostream& os, Status status) {
@@ -250,13 +266,12 @@ namespace worker {
         throw std::domain_error("status does not have string conversion");
     }
 
-    template<class Function, class... Args>
-    std::ostream& operator<<(std::ostream& os, Worker<Function, Args...>& worker) {
+    std::ostream& operator<<(std::ostream& os, BaseWorker& worker) {
         auto worker_status = worker.status();
-        os << "Worker" << " - " << worker_status;
+        os << "worker" << " - " << worker_status;
 
         if (worker_status == Status::RUNNING || worker_status == Status::PAUSED) {
-            os << "(" << std::setprecision(3) << worker.progress() * 100 << "% done)";
+            os << " (" << std::round(worker.progress() * 100) << "% done)";
         }
         return os;
     }
