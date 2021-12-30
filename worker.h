@@ -8,6 +8,7 @@
 #include <functional>
 #include <condition_variable>
 #include <optional>
+#include <iomanip>
 
 namespace worker {
     enum class Status {
@@ -20,7 +21,7 @@ namespace worker {
     /**
      * Async worker that can be paused, restarted, stopped and destroyed.
      * Implemented by wrapping std::async - always run in separate thread.
-     * Assumed to be controlled from a single thread.
+     * Worker instance must be controlled by a single thread.
      * @tparam Function function type (see std::async)
      * @tparam Args function arguments (see std::async)
      */
@@ -48,10 +49,10 @@ namespace worker {
             return status_;
         }
 
-        /** Returns worker's progress, in the 0-100 range (percentage) */
-        [[nodiscard]] int progress() const { return progress_; };
+        /** Returns worker's progress, in the 0-1 range (0%-100%) */
+        [[nodiscard]] double progress() const { return progress_; };
 
-        /** Returns worker's result. Blocks until the result is available.
+        /** Returns worker's result. Blocks until the result is available (worker finished or stopped).
          * As this is wrapper for std::future::get, result can only be obtained once.
          * @throws std::future_error if future state is invalid (e.g. result already obtained)
          */
@@ -94,21 +95,19 @@ namespace worker {
          * Also used to publish worker's progress.
          * Good worker functions should should call this regularly
          * while still keeping in mind the overhead of this call (most notably the mutex lock)
-         * @param progress worker's updated progress, in the 0-100 range (percentage)
-         * @throws std::domain_error if progress passed is not in the 0-100 range
+         * @param progress worker's updated progress, in the 0-1 range (0%-100%)
          * @return boolean indicating whether the worker should cleanly stop (true) or keep running (false)
          */
-        bool yield(int progress);
+        bool yield(double progress);
 
         /**
-         * Set worker's progress
-         * @param progress worker's updated progress, in the 0-100 range (percentage)
-         * @throws std::domain_error if progress passed is not in the 0-100 range
+         * Set worker's progress. Clamped to the valid range.
+         * @param progress worker's updated progress, in the 0-1 range (0%-100%)
          */
-        void set_progress(int progress);
+        void set_progress(double progress);
 
         Status status_ = Status::RUNNING;
-        std::atomic<int> progress_ = 0; // in percentages (0-100)
+        std::atomic<double> progress_ = 0; // in percentages (0-1)
 
         std::future<function_return_t> future_;
 
@@ -200,12 +199,12 @@ namespace worker {
 
         // force 100% progress if worker finished
         if (status_ == Status::FINISHED) {
-            set_progress(100);
+            set_progress(1);
         }
     }
 
     template<class Function, class... Args>
-    bool Worker<Function, Args...>::yield(int progress) {
+    bool Worker<Function, Args...>::yield(double progress) {
         set_progress(progress);
 
         std::unique_lock<std::mutex> lock(status_m_);
@@ -225,7 +224,6 @@ namespace worker {
         }
 
         if (status_change_ == Status::STOPPED) {
-            status_change_.reset();
             return false; // worker implementation needs to stop cleanly
         }
 
@@ -233,11 +231,8 @@ namespace worker {
     }
 
     template<class Function, class... Args>
-    void Worker<Function, Args...>::set_progress(int progress) {
-        if (progress < 0 || progress > 100) {
-            throw std::domain_error("Progress is outside the 0-100 range");
-        }
-        progress_ = progress;
+    void Worker<Function, Args...>::set_progress(double progress) {
+        progress_ = std::clamp(progress, 0., 1.);
     }
 
     std::ostream& operator<<(std::ostream& os, Status status) {
@@ -261,7 +256,7 @@ namespace worker {
         os << "Worker" << " - " << worker_status;
 
         if (worker_status == Status::RUNNING || worker_status == Status::PAUSED) {
-            os << "(" << worker.progress() << "% done)";
+            os << "(" << std::setprecision(3) << worker.progress() * 100 << "% done)";
         }
         return os;
     }
