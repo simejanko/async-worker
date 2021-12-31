@@ -61,7 +61,7 @@ namespace worker {
         // sample a random worker function from WORKER_EXAMPLES
         std::random_device rd;
         std::mt19937 gen(rd());
-        std::uniform_int_distribution<std::size_t> distr(0, WORKER_EXAMPLES.size());
+        std::uniform_int_distribution<std::size_t> distr(0, WORKER_EXAMPLES.size()-1);
         std::string worker_name = WORKER_EXAMPLES[distr(gen)];
 
         if (worker_name == "dummy_worker") {
