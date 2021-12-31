@@ -22,13 +22,20 @@ namespace worker {
      */
     class BaseWorker {
     public:
-        BaseWorker() = default; // explicit default since copy-constructor is explicitly deleted
+        BaseWorker() = default;
+
+        /** @param name: Optional name for this worker. */
+        explicit BaseWorker(const std::string& name);
+
         virtual ~BaseWorker() = 0; // abstract class
 
         // non-copyable
         BaseWorker(const BaseWorker& other) = delete;
 
         BaseWorker& operator=(BaseWorker& other) = delete;
+
+        /** Returns worker name (can be empty) */
+        [[nodiscard]] std::string name() const { return name_; }
 
         /** Returns worker status (e.g. running, paused, ...) */
         [[nodiscard]] Status status() const {
@@ -85,6 +92,7 @@ namespace worker {
         void worker_done();
 
     private:
+        std::string name_;
         Status status_ = Status::RUNNING;
         std::atomic<double> progress_ = 0; // in percentages (0-1)
 
@@ -111,7 +119,11 @@ namespace worker {
 
     public:
         /** Constructs worker from passed function & arguments */
-        explicit AsyncWorker(Function f, Args ... args); //TODO: figure out how to make it work with forwarding references
+        explicit AsyncWorker(Function f,
+                             Args ... args); //TODO: figure out how to make it work with forwarding references
+
+        /** Constructs worker from passed function & arguments and optional name for this worker. */
+        AsyncWorker(const std::string& name, Function f, Args ... args);
 
         /**
          * Returns worker's result. Blocks until the result is available (worker finished or stopped).
@@ -126,6 +138,9 @@ namespace worker {
         }
 
     private:
+        /** Initializes future member by running std::async. Called by constructors. */
+        void init_future();
+
         /** Wrapper method that's run in separate thread by std::async */
         function_return_t work(Function f, Args ... args);
 
@@ -139,6 +154,8 @@ namespace worker {
 
 
     // ******* Implementations ********************************************
+    BaseWorker::BaseWorker(const std::string& name) : name_(name) {}
+
     BaseWorker::~BaseWorker() = default; // pure virtual destructor still needs default implementation
 
     void BaseWorker::pause() {
@@ -226,8 +243,13 @@ namespace worker {
     }
 
     template<class Function, class... Args>
-    AsyncWorker<Function, Args...>::AsyncWorker(Function f, Args ... args)  : future_(
-            std::async(std::launch::async, &AsyncWorker::work, this, f, args...)) {}
+    AsyncWorker<Function, Args...>::AsyncWorker(Function f, Args ... args):
+            future_(std::async(std::launch::async, &AsyncWorker::work, this, f, args...)) {}
+
+    //TODO: code replication
+    template<class Function, class... Args>
+    AsyncWorker<Function, Args...>::AsyncWorker(const std::string& name, Function f, Args ... args):
+            BaseWorker(name), future_(std::async(std::launch::async, &AsyncWorker::work, this, f, args...)) {}
 
     template<class Function, class... Args>
     typename AsyncWorker<Function, Args...>::function_return_t
@@ -265,7 +287,7 @@ namespace worker {
 
     std::ostream& operator<<(std::ostream& os, BaseWorker& worker) {
         auto worker_status = worker.status();
-        os << "worker" << " - " << worker_status;
+        os << "worker " << worker.name() << " - " << worker_status;
 
         if (worker_status == Status::RUNNING || worker_status == Status::PAUSED) {
             os << " (" << std::round(worker.progress() * 100) << "% done)";

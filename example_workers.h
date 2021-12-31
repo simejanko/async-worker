@@ -68,11 +68,12 @@ namespace worker {
             std::uniform_int_distribution<int> loop_n_distr(100, 10000), sleep_ms_distr(10, 100);
             // unfortunately pointers and template deductions don't play nice
             return std::make_shared<AsyncWorker<decltype(&dummy_worker), int, int>>(
-                    &dummy_worker, loop_n_distr(gen), sleep_ms_distr(gen));
+                    worker_name, &dummy_worker, loop_n_distr(gen), sleep_ms_distr(gen));
         }
         if (worker_name == "fibonacci_slow") {
             std::uniform_int_distribution<int> n_distr(40, 50);
-            return std::make_shared<AsyncWorker<decltype(&fibonacci_slow), int>>(&fibonacci_slow, n_distr(gen));
+            return std::make_shared<AsyncWorker<decltype(&fibonacci_slow), int>>(
+                    worker_name, &fibonacci_slow, n_distr(gen));
         }
         if (worker_name == "selection_sort") {
             std::uniform_int_distribution<std::size_t> vec_size(1000, 1e6);
@@ -87,7 +88,7 @@ namespace worker {
                         return vec_copy;
                     };
 
-            return std::make_shared<AsyncWorker<decltype(lambda)>>(lambda);
+            return std::make_shared<AsyncWorker<decltype(lambda)>>(worker_name, lambda);
         }
 
         throw std::logic_error("Unimplemented worker in random factory: " + worker_name);
