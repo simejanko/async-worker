@@ -16,8 +16,9 @@ namespace worker {
     };
 
     /**
-     * Abstract base worker class that can be paused, restarted, stopped and destroyed.
-     * Instances must be controlled (e.g. paused, restarted) from a single thread
+     * Abstract base worker class that can be paused, restarted and stopped.
+     * Instances must be modified (paused, restarted, stopped) from a single thread.
+     * Const methods can be used from a different thread.
      */
     class BaseWorker {
     public:
@@ -57,7 +58,7 @@ namespace worker {
         void stop();
 
         /** Waits for worker to finish/stop. */
-        void wait();
+        void wait() const;
 
     protected:
         /**
@@ -160,7 +161,7 @@ namespace worker {
 
         status_change_ = Status::RUNNING;
         // notify sleeping worker
-        status_cv_.notify_one();
+        status_cv_.notify_all();
 
         // wait for restart to happen or for worker to finish
         status_cv_.wait(lock, [this]() { return status_ == Status::RUNNING || status_ == Status::FINISHED; });
@@ -174,14 +175,13 @@ namespace worker {
 
         status_change_ = Status::STOPPED;
         // notify potentially sleeping worker
-        status_cv_.notify_one();
+        status_cv_.notify_all();
 
         // wait for worker to stop or finish
         status_cv_.wait(lock, [this]() { return status_ == Status::STOPPED || status_ == Status::FINISHED; });
     }
 
-
-    void BaseWorker::wait() {
+    void BaseWorker::wait() const {
         std::unique_lock<std::mutex> lock(status_m_);
         status_cv_.wait(lock, [this]() { return status_ == Status::STOPPED || status_ == Status::FINISHED; });
     }
@@ -194,7 +194,7 @@ namespace worker {
             status_change_.reset();
             status_ = Status::PAUSED;
             // notify of the status change
-            status_cv_.notify_one();
+            status_cv_.notify_all();
             // sleep until restart or stop is requested
             status_cv_.wait(lock, [this]() {
                 return status_change_ == Status::RUNNING || status_change_ == Status::STOPPED;
@@ -202,7 +202,7 @@ namespace worker {
 
             status_ = Status::RUNNING;
             // notify of the wake
-            status_cv_.notify_one();
+            status_cv_.notify_all();
         }
 
         if (status_change_ == Status::STOPPED) {
@@ -222,7 +222,7 @@ namespace worker {
             set_progress(1);
         }
         // notify of the status change
-        status_cv_.notify_one();
+        status_cv_.notify_all();
     }
 
     template<class Function, class... Args>
