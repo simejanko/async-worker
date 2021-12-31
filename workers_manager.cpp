@@ -60,90 +60,113 @@ CmdOptions parse_cmd_options(int argc, char** argv) {
     return options;
 }
 
-void
-parse_command(const std::vector<std::shared_ptr<worker::BaseWorker>>& workers, std::vector<std::string> command_split) {
-    if (command_split.empty() || command_split[0].empty()) {
-        return;
-    }
-
-    if (command_split[0] == "status") {
-        if (command_split.size() != 1) {
-            std::cout << "Invalid number of command tokens" << std::endl;
-            return;
-        }
-
-        std::cout << "Workers status:" << std::endl;
-        for (std::size_t i = 0; i < workers.size(); ++i) {
-            std::cout << std::setw(5) << i + 1 << " | " << *workers[i] << std::endl;
-        }
-    }
-    else {
-        if (command_split.size() != 2) {
-            std::cout << "Invalid number of command tokens" << std::endl;
-            return;
-        }
-
-        try {
-            int id = std::stoi(command_split[1]);
-            if (id <= 0) {
-                throw std::out_of_range("Negative or zero id");
-            }
-
-            auto& worker = workers.at(id - 1);
-
-            if (command_split[0] == "pause") {
-                worker->pause();
-                std::cout << "Worker has been paused" << std::endl;
-            }
-            else if (command_split[0] == "restart") {
-                worker->restart();
-                std::cout << "Worker has been restarted" << std::endl;
-            }
-            else if (command_split[0] == "stop") {
-                worker->stop();
-                std::cout << "Worker has been stopped" << std::endl;
-            }
-
-        }
-        catch (const std::invalid_argument& e) {
-            std::cout << "First argument should be a number" << std::endl;
-        }
-        catch (const std::out_of_range& e) {
-            std::cout << "Thread id should be in [1, " << workers.size() << "] range" << std::endl;
-        }
-        catch (const std::logic_error& e) {
-            std::cout << "Error occured while processing command: " << e.what() << std::endl;
-        }
-
-    }
-}
-
 /**
- * CLI mainloop that parses commands from standard input and converts them to BaseWorker method calls
- * @param workers: vector of workers that will be managed
- * @param stop: atomic boolean used as a stopping condition
+ * Accepts commands for controlling workers from standard input and executes them.
+ * It's mainloop may be started from a different thread.
  */
-void workers_manager(const std::vector<std::shared_ptr<worker::BaseWorker>> workers, std::atomic<bool>& stop) {
-    // print help
-    std::cout << "Welcome to Workers Manager" << std::endl;
-    std::cout << "Commands: " << std::endl;
-    std::cout << "  status - Prints id and status of all workers" << std::endl;
-    std::cout << "  pause <id> - Pauses worker with id <id>" << std::endl;
-    std::cout << "  restart <id> - Restarts (resumes) worker with id <id>" << std::endl;
-    std::cout << "  stop <id> - Stops worker with id <id>" << std::endl;
-    std::cout << std::string(40, '-') << std::endl;
+class WorkersManagerCLI {
+public:
+    /** Accepts vector of BaseWorker instances to manage */
+    explicit WorkersManagerCLI(const std::vector<std::shared_ptr<worker::BaseWorker>>& workers) : workers_(workers) {}
 
-    std::string command;
-    std::vector<std::string> command_split;
-    while (!stop) {
-        std::cout << std::endl << "cmd: ";
+    /** Reads commands from standard input & executes them until stopped. */
+    void mainloop() {
+        print_help();
 
-        std::getline(std::cin, command);
+        std::string command;
+        std::vector<std::string> tokenized_comand;
 
-        boost::split(command_split, command, boost::is_any_of(" \t"), boost::token_compress_on);
-        parse_command(workers, command_split);
+        while (!stop_) {
+            std::cout << std::endl << "cmd: ";
+
+            std::getline(std::cin, command);
+
+            boost::split(tokenized_comand, command, boost::is_any_of(" \t"), boost::token_compress_on);
+            execute_command(tokenized_comand);
+        }
     }
-}
+
+    void stop() {
+        stop_ = true;
+        std::cout << "Workers Manager stopped. Press enter to quit..." << std::endl;
+    }
+
+private:
+    /** Prints help message with available commands */
+    static void print_help() {
+        std::cout << "Welcome to Workers Manager" << std::endl;
+        std::cout << "Commands: " << std::endl;
+        std::cout << "  status - Prints id and status of all workers" << std::endl;
+        std::cout << "  pause <id> - Pauses worker with id <id>" << std::endl;
+        std::cout << "  restart <id> - Restarts (resumes) worker with id <id>" << std::endl;
+        std::cout << "  stop <id> - Stops worker with id <id>" << std::endl;
+        std::cout << std::string(40, '-') << std::endl;
+    }
+
+    /**
+     * Parses and executes a single command
+     * @param tokenized_comand command, that's already been tokenized into words
+     */
+    void execute_command(std::vector<std::string>& tokenized_comand) {
+        if (tokenized_comand.empty() || tokenized_comand[0].empty()) { // nothing to parse
+            return;
+        }
+
+        std::string main_command = tokenized_comand[0];
+
+        if (tokenized_comand.size() == 1) { // commands without arguments
+            if (main_command == "status") {
+                std::cout << "Workers status:" << std::endl;
+                for (std::size_t i = 0; i < workers_.size(); ++i) {
+                    std::cout << std::setw(5) << i + 1 << " | " << *workers_[i] << std::endl;
+                }
+                return;
+            }
+        }
+        else if (tokenized_comand.size() == 2) { // assume commands with a single worker id argument
+            try {
+                int id = std::stoi(tokenized_comand[1]);
+                if (id <= 0) {
+                    throw std::out_of_range("Negative or zero id");
+                }
+
+                auto& worker = workers_.at(id - 1); // ids start with 1
+
+                if (main_command == "pause") {
+                    worker->pause();
+                    std::cout << "Worker has been paused" << std::endl;
+                    return;
+                }
+                else if (main_command == "restart") {
+                    worker->restart();
+                    std::cout << "Worker has been restarted" << std::endl;
+                    return;
+                }
+                else if (main_command == "stop") {
+                    worker->stop();
+                    std::cout << "Worker has been stopped" << std::endl;
+                    return;
+                }
+            }
+            catch (const std::invalid_argument& e) {
+                std::cout << "Second argument should be a number" << std::endl;
+                return;
+            }
+            catch (const std::out_of_range& e) {
+                std::cout << "Worker id should be in [1, " << workers_.size() << "] range" << std::endl;
+                return;
+            }
+            catch (const std::logic_error& e) {
+                std::cout << "Error occurred while processing command: " << e.what() << std::endl;
+                return;
+            }
+        }
+        std::cout << "Unrecognized command format" << std::endl;
+    }
+
+    std::atomic<bool> stop_ = false;
+    std::vector<std::shared_ptr<worker::BaseWorker>> workers_;
+};
 
 int main(int argc, char** argv) {
     CmdOptions options = parse_cmd_options(argc, argv);
@@ -152,17 +175,18 @@ int main(int argc, char** argv) {
     std::vector<std::shared_ptr<worker::BaseWorker>> workers(options.n_workers);
     std::generate(workers.begin(), workers.end(), &worker::random_worker);
 
-    std::atomic<bool> stop_workers_manager = false;
-    std::thread t(&workers_manager, workers, std::ref(stop_workers_manager));
+    // run worker manager cli in a separate thread
+    WorkersManagerCLI workers_manager(workers);
+    std::thread worker_manager_thread(&WorkersManagerCLI::mainloop, &workers_manager);
 
     // wait for all workers to finish/stop
     for (auto& worker: workers) {
         worker->wait();
     }
+    std::cout << "All workers stopped or finished" << std::endl;
 
-    stop_workers_manager = true;
-    std::cout << "All workers stopped or finished. Press enter to quit..." << std::endl;
-
-    t.join();
+    // finally, wait for workers manager CLI to stop
+    workers_manager.stop();
+    worker_manager_thread.join();
     return 0;
 }
