@@ -57,7 +57,7 @@ namespace worker {
         void stop();
 
         /** Waits for worker to finish/stop. */
-        virtual void wait();
+        void wait();
 
     protected:
         /**
@@ -110,7 +110,7 @@ namespace worker {
 
     public:
         /** Constructs worker from passed function & arguments */
-        explicit AsyncWorker(Function&& f, Args&& ... args);
+        explicit AsyncWorker(Function f, Args ... args); //TODO: figure out how to make it work with forwarding references
 
         /**
          * Returns worker's result. Blocks until the result is available (worker finished or stopped).
@@ -126,7 +126,7 @@ namespace worker {
 
     private:
         /** Wrapper method that's run in separate thread by std::async */
-        function_return_t work(Function&& f, Args&& ... args);
+        function_return_t work(Function f, Args ... args);
 
         std::future<function_return_t> future_;
     };
@@ -138,6 +138,8 @@ namespace worker {
 
 
     // ******* Implementations ********************************************
+    BaseWorker::~BaseWorker() = default; // pure virtual destructor still needs default implementation
+
     void BaseWorker::pause() {
         std::unique_lock<std::mutex> lock(status_m_);
         if (status_ != Status::RUNNING) {
@@ -175,13 +177,13 @@ namespace worker {
         status_cv_.notify_one();
 
         // wait for worker to stop or finish
-        status_cv_.wait(lock,[this]() { return status_ == Status::STOPPED || status_ == Status::FINISHED; });
+        status_cv_.wait(lock, [this]() { return status_ == Status::STOPPED || status_ == Status::FINISHED; });
     }
 
 
     void BaseWorker::wait() {
         std::unique_lock<std::mutex> lock(status_m_);
-        status_cv_.wait(lock,[this]() { return status_ == Status::STOPPED || status_ == Status::FINISHED; });
+        status_cv_.wait(lock, [this]() { return status_ == Status::STOPPED || status_ == Status::FINISHED; });
     }
 
     bool BaseWorker::yield(double progress) {
@@ -224,23 +226,23 @@ namespace worker {
     }
 
     template<class Function, class... Args>
-    AsyncWorker<Function, Args...>::AsyncWorker(Function&& f, Args&& ... args)  : future_(
-            std::async(std::launch::async, &AsyncWorker::work, this, f, std::forward<Args>(args)...)) {}
+    AsyncWorker<Function, Args...>::AsyncWorker(Function f, Args ... args)  : future_(
+            std::async(std::launch::async, &AsyncWorker::work, this, f, args...)) {}
 
     template<class Function, class... Args>
     typename AsyncWorker<Function, Args...>::function_return_t
-    AsyncWorker<Function, Args...>::work(Function&& f, Args&& ... args) {
+    AsyncWorker<Function, Args...>::work(Function f, Args ... args) {
         // yield function that's to be passed to worker function
         auto yield_func = std::bind(&AsyncWorker::yield, this, std::placeholders::_1);
 
         // void return type needs to be handled separately
         if constexpr(std::is_same_v<function_return_t, void>) {
-            f(yield_func, std::forward<Args>(args)...);
+            f(yield_func, args...);
             worker_done();
             return;
         }
         else {
-            function_return_t ret = f(yield_func, std::forward<Args>(args)...);
+            function_return_t ret = f(yield_func, args...);
             worker_done();
             return ret;
         }
