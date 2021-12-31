@@ -160,10 +160,8 @@ int main(int argc, char** argv) {
         worker->wait();
     }
 
-    //TODO: Ctrl + C
-    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     stop_workers_manager = true;
-    std::cout << "All workers stopped or finished. Press enter or Ctrl+C to quit..." << std::endl;
+    std::cout << "All workers stopped or finished. Press enter to quit..." << std::endl;
 
     t.join();
     return 0;
