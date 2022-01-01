@@ -11,6 +11,7 @@ restarted and stopped. Implemented by wrapping `std::async` - but always run in 
 random worker factory function.
 
 * `workers_manager.cpp` includes a simple CLI program that starts random workers and allows us to control them via standard input.
+Depends on `Boost`.
 
 # Workers Manager CLI
 ## Command line options
@@ -37,3 +38,7 @@ cd build
 cmake ..
 make
 ```
+
+## Prebuilt
+* [Ubuntu 18.04 x86_64](https://drive.google.com/file/d/1aNx-UmNlZjtGMJNIBSGtVSRl1DwOtAFM/view?usp=sharing)
+* Windows... TODO
