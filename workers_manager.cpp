@@ -21,7 +21,7 @@ CmdOptions parse_cmd_options(int argc, char** argv) {
     CmdOptions options;
 
     // Declare the supported options.
-    po::options_description desc("Async workers manger. Options:");
+    po::options_description desc("Workers Manager");
     desc.add_options()
             ("help", "prints help message")
             ("threads,t", po::value<int>(&options.n_workers)->required()->value_name("nb_threads"),

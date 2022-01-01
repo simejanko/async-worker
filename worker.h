@@ -111,7 +111,7 @@ namespace worker {
     using yield_function_t = std::function<bool(double)>;
 
     /**
-     * Async worker that can be paused, restarted, stopped, destroyed and returns result.
+     * Async worker that can be paused, restarted, stopped and returns result.
      * Implemented by wrapping std::async - always run in separate thread.
      * @tparam Function function type (see std::async). The main difference with std::async interface is
      *   that the function must accept yield function (yield_function_t) as it's first argument (see BaseWorker::yield).
