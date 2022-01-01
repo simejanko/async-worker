@@ -165,7 +165,13 @@ namespace worker {
 
 
     // ******* Implementations ********************************************
-    BaseWorker::~BaseWorker() { stop(); }
+    BaseWorker::~BaseWorker() {
+        try {
+            stop();
+        }
+        catch(std::logic_error &e){ // swallow, worker already finished
+        }
+    }
 
     void BaseWorker::pause() {
         std::unique_lock<std::mutex> lock(status_m_);
