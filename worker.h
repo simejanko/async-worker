@@ -32,7 +32,7 @@ namespace worker {
         // non-copyable
         BaseWorker(const BaseWorker& other) = delete;
 
-        BaseWorker& operator=(BaseWorker& other) = delete;
+        BaseWorker& operator=(const BaseWorker& other) = delete;
 
         /** Returns worker name (can be empty) */
         [[nodiscard]] std::string name() const { return name_; }
@@ -44,7 +44,7 @@ namespace worker {
         }
 
         /** Returns worker's progress, in the 0-1 range (0%-100%) */
-        [[nodiscard]] double progress() const { return progress_; };
+        [[nodiscard]] double progress() const { return progress_; }
 
         /**
          * Pauses worker (blocking call)
@@ -118,12 +118,15 @@ namespace worker {
         using function_return_t = std::invoke_result_t<std::decay_t<Function>, yield_function_t, std::decay_t<Args>...>;
 
     public:
-        /** Constructs worker from passed function & arguments */
-        explicit AsyncWorker(Function f,
-                             Args ... args); //TODO: figure out how to make it work with forwarding references
+        /** Constructs worker from passed function & arguments. */
+        explicit AsyncWorker(Function f, Args... args) {
+            start(std::move(f), std::move(args)...);
+        }
 
         /** Constructs worker from passed function & arguments and optional name for this worker. */
-        AsyncWorker(const std::string& name, Function f, Args ... args);
+        AsyncWorker(const std::string& name, Function f, Args... args) : BaseWorker(name) {
+            start(std::move(f), std::move(args)...);
+        }
 
         /**
          * Returns worker's result. Blocks until the result is available (worker finished or stopped).
@@ -138,11 +141,13 @@ namespace worker {
         }
 
     private:
-        /** Initializes future member by running std::async. Called by constructors. */
-        void init_future();
+        /** Runs std::async on work method. Called by constructors. */
+        void start(Function&& f, Args&& ... args) {
+            future_ = std::async(std::launch::async, &AsyncWorker::work, this, std::move(f), std::move(args)...);
+        }
 
         /** Wrapper method that's run in separate thread by std::async */
-        function_return_t work(Function f, Args ... args);
+        function_return_t work(Function&& f, Args&& ... args);
 
         std::future<function_return_t> future_;
     };
@@ -243,28 +248,19 @@ namespace worker {
     }
 
     template<class Function, class... Args>
-    AsyncWorker<Function, Args...>::AsyncWorker(Function f, Args ... args):
-            future_(std::async(std::launch::async, &AsyncWorker::work, this, f, args...)) {}
-
-    //TODO: code replication
-    template<class Function, class... Args>
-    AsyncWorker<Function, Args...>::AsyncWorker(const std::string& name, Function f, Args ... args):
-            BaseWorker(name), future_(std::async(std::launch::async, &AsyncWorker::work, this, f, args...)) {}
-
-    template<class Function, class... Args>
     typename AsyncWorker<Function, Args...>::function_return_t
-    AsyncWorker<Function, Args...>::work(Function f, Args ... args) {
+    AsyncWorker<Function, Args...>::work(Function&& f, Args&& ... args) {
         // yield function that's to be passed to worker function
         auto yield_func = std::bind(&AsyncWorker::yield, this, std::placeholders::_1);
 
         // void return type needs to be handled separately
         if constexpr(std::is_same_v<function_return_t, void>) {
-            f(yield_func, args...);
+            f(yield_func, std::move(args)...);
             worker_done();
             return;
         }
         else {
-            function_return_t ret = f(yield_func, args...);
+            function_return_t ret = f(yield_func, std::move(args)...);
             worker_done();
             return ret;
         }
