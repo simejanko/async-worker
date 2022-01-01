@@ -10,7 +10,7 @@
 #include "worker.h"
 
 namespace worker {
-    const std::vector<std::string> WORKER_EXAMPLES = {"dummy_worker", "fibonacci_slow", "selection_sort"};
+    const std::vector<std::string> WORKER_EXAMPLES = {"dummy_worker", "fibonacci_slow", "selection_sort", "file_writer"};
 
     /** Dummy worker with a loop and sleep */
     void dummy_worker(yield_function_t yield, int loop_n, int sleep_ms) {
@@ -53,6 +53,34 @@ namespace worker {
         }
     }
 
+    /** Writes n_lines of length line_length to temporary file */
+    void file_writer(yield_function_t yield, int n_lines, int line_length) {
+        const std::string ALPHABET = "abcdefghijklmnopqrstuvwxyz";
+
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_int_distribution<std::size_t> alphabet_distr(0, ALPHABET.size() - 1);
+
+        std::FILE* tmp_file = std::tmpfile();
+        std::stringstream line;
+
+        for (int i = 0; i < n_lines; i++) {
+            // generate random string
+            for (int j = 0; j < line_length; j++) {
+                line << ALPHABET[alphabet_distr(gen)];
+            }
+            line << std::endl;
+
+            std::fputs(line.str().c_str(), tmp_file);
+            line.str(""); // clear stream
+
+            // only yield execution every 100 lines
+            if (i % 100 == 0 && !yield(static_cast<double>(i) / n_lines)) {
+                break;
+            }
+        }
+    }
+
     /**
      * Factory function that returns random BaseWorker instances with random arguments, based on implementations in this file
      * @throws std::logic_error if worker that's not yet implemented in the factory is selected
@@ -89,6 +117,14 @@ namespace worker {
                     };
 
             return std::make_shared<AsyncWorker<decltype(lambda)>>(worker_name, lambda);
+        }
+
+        if (worker_name == "file_writer") {
+            std::uniform_int_distribution<int> n_lines_distr(1e5, 1e6);
+            std::uniform_int_distribution<int> line_length_distr(50, 150);
+
+            return std::make_shared<AsyncWorker<decltype(&file_writer), int, int>>(
+                    worker_name, &file_writer, n_lines_distr(gen), line_length_distr(gen));
         }
 
         throw std::logic_error("Unimplemented worker in random factory: " + worker_name);
