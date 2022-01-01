@@ -16,18 +16,21 @@ namespace worker {
     };
 
     /**
-     * Abstract base worker class that can be paused, restarted and stopped.
+     * Abstract base class for worker that can be paused, restarted and stopped.
      * Instances must be modified (paused, restarted, stopped) from a single thread.
-     * Const methods can be used from a different thread.
      */
     class BaseWorker {
     public:
         BaseWorker() = default;
 
         /** @param name: Optional name for this worker. */
-        explicit BaseWorker(const std::string& name);
+        explicit BaseWorker(std::string name) : name_(std::move(name)) {};
 
-        virtual ~BaseWorker() = 0; // abstract class
+        /**
+         * Pure virtual destructor declaration to mark an abstract class.
+         * Default implementation stops worker and waits till it stops/finishes cleanly.
+         */
+        virtual ~BaseWorker() = 0;
 
         // non-copyable
         BaseWorker(const BaseWorker& other) = delete;
@@ -37,13 +40,13 @@ namespace worker {
         /** Returns worker name (can be empty) */
         [[nodiscard]] std::string name() const { return name_; }
 
-        /** Returns worker status (e.g. running, paused, ...) */
+        /** Returns worker status (e.g. running, paused, ...). Thread-safe. */
         [[nodiscard]] Status status() const {
             std::lock_guard<std::mutex> lock(status_m_);
             return status_;
         }
 
-        /** Returns worker's progress, in the 0-1 range (0%-100%) */
+        /** Returns worker's progress, in the 0-1 range (0%-100%). Thread-safe. */
         [[nodiscard]] double progress() const { return progress_; }
 
         /**
@@ -64,12 +67,12 @@ namespace worker {
         */
         void stop();
 
-        /** Waits for worker to finish/stop. */
+        /** Waits for worker to finish/stop. Thread-safe. */
         void wait() const;
 
     protected:
         /**
-        * Must be called in a worker thread when it can yield control of execution.
+        * Must be called in a worker thread when the thread can yield control of execution.
         * Sleeps in case worker should be paused (until resumed) and checks if worker needs to stop.
         * Also used to publish worker's progress.
         * Good implementations should should call this regularly
@@ -92,6 +95,9 @@ namespace worker {
         void worker_done();
 
     private:
+        /** Utility for checking terminal states (not thread safe) */
+        bool terminal_status() const { return status_ == Status::STOPPED || status_ == Status::FINISHED; }
+
         std::string name_;
         Status status_ = Status::RUNNING;
         std::atomic<double> progress_ = 0; // in percentages (0-1)
@@ -124,7 +130,7 @@ namespace worker {
         }
 
         /** Constructs worker from passed function & arguments and optional name for this worker. */
-        AsyncWorker(const std::string& name, Function f, Args... args) : BaseWorker(name) {
+        AsyncWorker(std::string name, Function f, Args... args) : BaseWorker(std::move(name)) {
             start(std::move(f), std::move(args)...);
         }
 
@@ -159,9 +165,7 @@ namespace worker {
 
 
     // ******* Implementations ********************************************
-    BaseWorker::BaseWorker(const std::string& name) : name_(name) {}
-
-    BaseWorker::~BaseWorker() = default; // pure virtual destructor still needs default implementation
+    BaseWorker::~BaseWorker() { stop(); }
 
     void BaseWorker::pause() {
         std::unique_lock<std::mutex> lock(status_m_);
@@ -171,8 +175,8 @@ namespace worker {
 
         status_change_ = Status::PAUSED;
 
-        // wait for pause to happen or for worker to finish
-        status_cv_.wait(lock, [this]() { return status_ == Status::PAUSED || status_ == Status::FINISHED; });
+        // wait for pause to happen or for worker to finish/stop
+        status_cv_.wait(lock, [this]() { return status_ == Status::PAUSED || terminal_status(); });
     }
 
     void BaseWorker::restart() {
@@ -185,8 +189,8 @@ namespace worker {
         // notify sleeping worker
         status_cv_.notify_all();
 
-        // wait for restart to happen or for worker to finish
-        status_cv_.wait(lock, [this]() { return status_ == Status::RUNNING || status_ == Status::FINISHED; });
+        // wait for restart to happen or for worker to finish/stop
+        status_cv_.wait(lock, [this]() { return status_ == Status::RUNNING || terminal_status(); });
     }
 
     void BaseWorker::stop() {
@@ -200,12 +204,17 @@ namespace worker {
         status_cv_.notify_all();
 
         // wait for worker to stop or finish
-        status_cv_.wait(lock, [this]() { return status_ == Status::STOPPED || status_ == Status::FINISHED; });
+        status_cv_.wait(lock, [this]() { return terminal_status(); });
     }
 
     void BaseWorker::wait() const {
         std::unique_lock<std::mutex> lock(status_m_);
-        status_cv_.wait(lock, [this]() { return status_ == Status::STOPPED || status_ == Status::FINISHED; });
+        // check if already finished
+        if (status_ == Status::STOPPED || status_ == Status::FINISHED) {
+            return;
+        }
+
+        status_cv_.wait(lock, [this]() { return terminal_status(); });
     }
 
     bool BaseWorker::yield(double progress) {
