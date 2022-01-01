@@ -67,7 +67,8 @@ CmdOptions parse_cmd_options(int argc, char** argv) {
 class WorkersManagerCLI {
 public:
     /** Accepts vector of BaseWorker instances to manage */
-    explicit WorkersManagerCLI(const std::vector<std::shared_ptr<worker::BaseWorker>>& workers) : workers_(workers) {}
+    explicit WorkersManagerCLI(std::vector<std::shared_ptr<worker::BaseWorker>> workers) :
+            workers_(std::move(workers)) {}
 
     /** Reads commands from standard input & executes them until stopped. */
     void mainloop() {
@@ -183,7 +184,7 @@ int main(int argc, char** argv) {
     for (auto& worker: workers) {
         worker->wait();
     }
-    std::cout << "All workers stopped or finished" << std::endl;
+    std::cout << std::endl << "All workers stopped or finished" << std::endl;
 
     // finally, wait for workers manager CLI to stop
     workers_manager.stop();

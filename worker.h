@@ -169,7 +169,7 @@ namespace worker {
         try {
             stop();
         }
-        catch(std::logic_error &e){ // swallow, worker already finished
+        catch (std::logic_error& e) { // swallow, worker already finished
         }
     }
 
@@ -298,10 +298,10 @@ namespace worker {
 
     std::ostream& operator<<(std::ostream& os, BaseWorker& worker) {
         auto worker_status = worker.status();
-        os << "worker " << worker.name() << " - " << worker_status;
+        os << "worker " << std::setw(20) << worker.name() << " - " << std::setw(10) << worker_status;
 
-        if (worker_status == Status::RUNNING || worker_status == Status::PAUSED) {
-            os << " (" << std::round(worker.progress() * 100) << "% done)";
+        if ((worker_status == Status::RUNNING || worker_status == Status::PAUSED) && worker.progress() > 0) {
+            os << " (" << std::setw(3) << std::round(worker.progress() * 100) << "% done)";
         }
         return os;
     }

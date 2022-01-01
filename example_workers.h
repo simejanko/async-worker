@@ -40,7 +40,7 @@ namespace worker {
     /** Simple selection sort */
     template<class Iterator>
     void selection_sort(yield_function_t yield, Iterator first, Iterator last) {
-        auto distance = std::distance(first, last);
+        auto distance = static_cast<double>(std::distance(first, last));
 
         int n_sorted = 0;
         for (Iterator it = first; it != last; ++it) {
@@ -61,22 +61,22 @@ namespace worker {
         // sample a random worker function from WORKER_EXAMPLES
         std::random_device rd;
         std::mt19937 gen(rd());
-        std::uniform_int_distribution<std::size_t> distr(0, WORKER_EXAMPLES.size()-1);
+        std::uniform_int_distribution<std::size_t> distr(0, WORKER_EXAMPLES.size() - 1);
         std::string worker_name = WORKER_EXAMPLES[distr(gen)];
 
         if (worker_name == "dummy_worker") {
-            std::uniform_int_distribution<int> loop_n_distr(100, 10000), sleep_ms_distr(10, 100);
+            std::uniform_int_distribution<int> loop_n_distr(200, 1000), sleep_ms_distr(10, 100);
             // unfortunately pointers and template deductions don't play nice
             return std::make_shared<AsyncWorker<decltype(&dummy_worker), int, int>>(
                     worker_name, &dummy_worker, loop_n_distr(gen), sleep_ms_distr(gen));
         }
         if (worker_name == "fibonacci_slow") {
-            std::uniform_int_distribution<int> n_distr(40, 50);
+            std::uniform_int_distribution<int> n_distr(35, 40);
             return std::make_shared<AsyncWorker<decltype(&fibonacci_slow), int>>(
                     worker_name, &fibonacci_slow, n_distr(gen));
         }
         if (worker_name == "selection_sort") {
-            std::uniform_int_distribution<std::size_t> vec_size(1000, 1e6);
+            std::uniform_int_distribution<std::size_t> vec_size(20000, 150000);
             std::uniform_int_distribution<int> vec_distr(-1e5, 1e5);
             std::vector<int> rand_vec(vec_size(gen));
             std::generate(rand_vec.begin(), rand_vec.end(), [&]() { return vec_distr(gen); });
