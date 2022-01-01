@@ -7,8 +7,9 @@ restarted and stopped. Implemented by wrapping `std::async` - but always run in 
 * C++17
 
 # Examples
-* `example_workers.h` includes some example functions that can be wrapped with `worker::AsyncWorker` and a corresponding
-random worker factory function.
+* `example_workers.h`
+  *  includes some example functions that can be wrapped with `worker::AsyncWorker`
+  *  random worker factory function.
 
 * `workers_manager.cpp` includes a simple CLI program that starts random workers and allows us to control them via standard input.
 Depends on `Boost`.
