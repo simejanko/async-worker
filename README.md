@@ -42,4 +42,4 @@ make
 
 ## Prebuilt
 * [Ubuntu 18.04 x86_64](https://drive.google.com/file/d/1aNx-UmNlZjtGMJNIBSGtVSRl1DwOtAFM/view?usp=sharing)
-* Windows... TODO
+* [Windows 10 x86](https://drive.google.com/file/d/1wiWcLH8o-oqZ3uyatwloWPm_RekgBfdu/view?usp=sharing)
