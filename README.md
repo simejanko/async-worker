@@ -1,13 +1,13 @@
 # Async worker
 
-Single header library (`worker.h`) with `worker::AsyncWorker` class used to run async tasks that can be safely paused,
+Single header library (`/include/worker/worker.hpp`) with `worker::AsyncWorker` class used to run async tasks that can be safely paused,
 restarted and stopped. Implemented by wrapping `std::async` - but always run in separate thread.
 
 ## Dependecies
 * C++17
 
 # Examples
-* `example_workers.h`
+* `example_workers.hpp`
   *  includes some example functions that can be wrapped with `worker::AsyncWorker`
   *  random worker factory function.
 
@@ -34,6 +34,7 @@ Commands:
 ## Build
 The CLI is built with `cmake`. Cmake needs to find `Boost` installation (tested on `1.78.0`) .
 ```
+cd examples
 mkdir build
 cd build
 cmake ..

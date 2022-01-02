@@ -1,14 +1,14 @@
 /** Examples of functions that can be used to create Worker instances and a random Worker factory function. **/
 
-#ifndef WORKERS_MANAGER_EXAMPLE_WORKERS_H
-#define WORKERS_MANAGER_EXAMPLE_WORKERS_H
+#ifndef WORKERS_MANAGER_EXAMPLE_WORKERS_HPP
+#define WORKERS_MANAGER_EXAMPLE_WORKERS_HPP
 
 #include <chrono>
 #include <cmath>
 #include <random>
 #include <thread>
 
-#include "worker.h"
+#include <worker/worker.hpp>
 
 namespace worker {
     const std::vector<std::string> WORKER_EXAMPLES = {"dummy_worker", "fibonacci_slow", "selection_sort",
@@ -135,4 +135,4 @@ namespace worker {
     }
 }
 
-#endif //WORKERS_MANAGER_EXAMPLE_WORKERS_H
+#endif //WORKERS_MANAGER_EXAMPLE_WORKERS_HPP

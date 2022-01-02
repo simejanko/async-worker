@@ -4,7 +4,7 @@
 #include <boost/program_options.hpp>
 #include <boost/algorithm/string.hpp>
 
-#include "example_workers.h"
+#include "example_workers.hpp"
 
 /** Command line options */
 struct CmdOptions {

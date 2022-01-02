@@ -1,5 +1,5 @@
-#ifndef WORKERS_MANAGER_WORKER_H
-#define WORKERS_MANAGER_WORKER_H
+#ifndef WORKERS_MANAGER_WORKER_HPP
+#define WORKERS_MANAGER_WORKER_HPP
 
 #include <iostream>
 #include <atomic>
@@ -306,4 +306,4 @@ namespace worker {
         return os;
     }
 }
-#endif //WORKERS_MANAGER_WORKER_H
+#endif //WORKERS_MANAGER_WORKER_HPP
