@@ -11,7 +11,8 @@
 #include "worker.h"
 
 namespace worker {
-    const std::vector<std::string> WORKER_EXAMPLES = {"dummy_worker", "fibonacci_slow", "selection_sort", "file_writer"};
+    const std::vector<std::string> WORKER_EXAMPLES = {"dummy_worker", "fibonacci_slow", "selection_sort",
+                                                      "file_writer"};
 
     /** Dummy worker with a loop and sleep */
     void dummy_worker(yield_function_t yield, int loop_n, int sleep_ms) {
@@ -54,19 +55,15 @@ namespace worker {
         }
     }
 
-    /** Writes n_lines of length line_length to temporary file & returns success status. */
-    bool file_writer(yield_function_t yield, int n_lines, int line_length) {
+    /** Writes n_lines of length line_length to temporary file. */
+    void file_writer(yield_function_t yield, int n_lines, int line_length) {
         const std::string ALPHABET = "abcdefghijklmnopqrstuvwxyz";
 
         std::random_device rd;
         std::mt19937 gen(rd());
         std::uniform_int_distribution<std::size_t> alphabet_distr(0, ALPHABET.size() - 1);
 
-        FILE* tmp_file;
-        auto err = tmpfile_s(&tmp_file);
-        if(err) {
-            return false;
-        }
+        FILE* tmp_file = std::tmpfile();
 
         std::stringstream line;
         for (int i = 0; i < n_lines; i++) {
@@ -86,7 +83,6 @@ namespace worker {
         }
 
         std::fclose(tmp_file); // close & delete temporary file
-        return true;
     }
 
     /**
