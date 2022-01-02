@@ -80,7 +80,7 @@ namespace worker {
         * @param progress worker's updated progress, in the 0-1 range (0%-100%)
         * @return boolean indicating whether the worker should cleanly stop (true) or keep running (false)
         */
-        bool yield(double progress);
+        [[nodiscard]] bool yield(double progress);
 
         /**
          * Set worker's progress. Clamped to the valid range.
