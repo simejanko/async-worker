@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cmath>
 #include <random>
+#include <thread>
 
 #include "worker.h"
 
@@ -53,17 +54,21 @@ namespace worker {
         }
     }
 
-    /** Writes n_lines of length line_length to temporary file */
-    void file_writer(yield_function_t yield, int n_lines, int line_length) {
+    /** Writes n_lines of length line_length to temporary file & returns success status. */
+    bool file_writer(yield_function_t yield, int n_lines, int line_length) {
         const std::string ALPHABET = "abcdefghijklmnopqrstuvwxyz";
 
         std::random_device rd;
         std::mt19937 gen(rd());
         std::uniform_int_distribution<std::size_t> alphabet_distr(0, ALPHABET.size() - 1);
 
-        std::FILE* tmp_file = std::tmpfile();
-        std::stringstream line;
+        FILE* tmp_file;
+        auto err = tmpfile_s(&tmp_file);
+        if(err) {
+            return false;
+        }
 
+        std::stringstream line;
         for (int i = 0; i < n_lines; i++) {
             // generate random string
             for (int j = 0; j < line_length; j++) {
@@ -79,6 +84,9 @@ namespace worker {
                 break;
             }
         }
+
+        std::fclose(tmp_file); // close & delete temporary file
+        return true;
     }
 
     /**

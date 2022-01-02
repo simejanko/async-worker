@@ -169,7 +169,7 @@ namespace worker {
         try {
             stop();
         }
-        catch (std::logic_error& e) { // swallow, worker already finished
+        catch (std::logic_error&) { // swallow, worker already finished
         }
     }
 
