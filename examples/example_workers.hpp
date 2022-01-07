@@ -7,6 +7,7 @@
 #include <cmath>
 #include <random>
 #include <thread>
+#include <sstream>
 
 #include <worker/worker.hpp>
 
@@ -44,7 +45,7 @@ namespace worker {
     void selection_sort(yield_function_t yield, Iterator first, Iterator last) {
         auto distance = static_cast<double>(std::distance(first, last));
 
-        int n_sorted = 0;
+        auto n_sorted = 0;
         for (Iterator it = first; it != last; ++it) {
             std::iter_swap(it, std::min_element(it, last));
             ++n_sorted;
@@ -63,12 +64,12 @@ namespace worker {
         std::mt19937 gen(rd());
         std::uniform_int_distribution<std::size_t> alphabet_distr(0, ALPHABET.size() - 1);
 
-        FILE* tmp_file = std::tmpfile();
+        auto tmp_file = std::tmpfile();
 
         std::stringstream line;
-        for (int i = 0; i < n_lines; i++) {
+        for (auto i = 0; i < n_lines; i++) {
             // generate random string
-            for (int j = 0; j < line_length; j++) {
+            for (auto j = 0; j < line_length; j++) {
                 line << ALPHABET[alphabet_distr(gen)];
             }
             line << std::endl;

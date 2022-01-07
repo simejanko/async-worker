@@ -7,6 +7,32 @@ restarted and stopped. Implemented by wrapping `std::async` - but always run in 
 * C++17
 
 # Examples
+* Example of a trivial worker implementation with sleep & for loop
+```C++
+#include <worker/worker.hpp>
+
+// all workers must accept worker::yield_function_t as first argument
+std::string dummy_worker(worker::yield_function_t yield, int loop_n, int sleep_ms) {
+    for (int i = 0; i < loop_n; ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(sleep_ms));
+
+        double progress = i / static_cast<double>(loop_n); // worker's progress in 0-1 range
+        bool keep_running = yield(progress); // worker yields execution to report progress & pause if needed
+        if (!keep_running) { // worker should cleanly stop
+            return "stopped";
+        }
+    }
+    return "finished";
+}
+
+int main() {
+    worker::AsyncWorker dummy_async(&dummy_worker, 100, 10); // initializes & starts worker
+    dummy_async.pause();
+    dummy_async.restart();
+    std::cout << "Worker result: " << dummy_async.result() << std::endl; // waits for result
+}
+```
+
 * `example_workers.hpp`
   *  includes some example functions that can be wrapped with `worker::AsyncWorker`
   *  random worker factory function.

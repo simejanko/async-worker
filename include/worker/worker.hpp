@@ -78,7 +78,7 @@ namespace worker {
         * Good implementations should should call this regularly
         * while still keeping in mind the overhead of this call (most notably the mutex lock)
         * @param progress worker's updated progress, in the 0-1 range (0%-100%)
-        * @return boolean indicating whether the worker should cleanly stop (true) or keep running (false)
+        * @return boolean indicating whether the worker should continue running (true) or cleanly stop (false)
         */
         [[nodiscard]] bool yield(double progress);
 
@@ -136,6 +136,7 @@ namespace worker {
 
         /**
          * Returns worker's result. Blocks until the result is available (worker finished or stopped).
+         * Note that the result might be invalid if worker was preemptively stopped (depends on worker implementation).
          * As this is wrapper for std::future::get, result can only be obtained once.
          * @throws std::future_error if future state is invalid (e.g. result already obtained)
          */
@@ -161,7 +162,7 @@ namespace worker {
     /** @throws std::domain_error if no string conversion for passed status */
     std::ostream& operator<<(std::ostream& os, Status status);
 
-    std::ostream& operator<<(std::ostream& os, BaseWorker& worker);
+    std::ostream& operator<<(std::ostream& os, const BaseWorker& worker);
 
 
     // ******* Implementations ********************************************
@@ -296,7 +297,7 @@ namespace worker {
         throw std::domain_error("status does not have string conversion");
     }
 
-    std::ostream& operator<<(std::ostream& os, BaseWorker& worker) {
+    std::ostream& operator<<(std::ostream& os, const BaseWorker& worker) {
         auto worker_status = worker.status();
         os << "worker " << std::setw(20) << worker.name() << " - " << std::setw(10) << worker_status;
 

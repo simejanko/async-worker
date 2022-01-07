@@ -108,12 +108,12 @@ private:
      * Parses and executes a single command
      * @param tokenized_comand command, that's already been tokenized into words
      */
-    void execute_command(std::vector<std::string>& tokenized_comand) {
+    void execute_command(const std::vector<std::string>& tokenized_comand) {
         if (tokenized_comand.empty() || tokenized_comand[0].empty()) { // nothing to parse
             return;
         }
 
-        std::string main_command = tokenized_comand[0];
+        const auto& main_command = tokenized_comand[0];
 
         if (tokenized_comand.size() == 1) { // commands without arguments
             if (main_command == "status") {
@@ -126,7 +126,7 @@ private:
         }
         else if (tokenized_comand.size() == 2) { // assume commands with a single worker id argument
             try {
-                int id = std::stoi(tokenized_comand[1]);
+                auto id = std::stoi(tokenized_comand[1]);
                 if (id <= 0) {
                     throw std::out_of_range("Negative or zero id");
                 }
@@ -170,7 +170,7 @@ private:
 };
 
 int main(int argc, char** argv) {
-    CmdOptions options = parse_cmd_options(argc, argv);
+    auto options = parse_cmd_options(argc, argv);
 
     // vector of random workers
     std::vector<std::shared_ptr<worker::BaseWorker>> workers(options.n_workers);
@@ -181,7 +181,7 @@ int main(int argc, char** argv) {
     std::thread worker_manager_thread(&WorkersManagerCLI::mainloop, &workers_manager);
 
     // wait for all workers to finish/stop
-    for (auto& worker: workers) {
+    for (const auto& worker: workers) {
         worker->wait();
     }
     std::cout << std::endl << "All workers stopped or finished" << std::endl;
