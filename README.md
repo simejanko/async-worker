@@ -33,11 +33,11 @@ int main() {
 }
 ```
 
-* `example_workers.hpp`
+* [`example_workers.hpp`](examples/example_workers.hpp)
   *  includes some example functions that can be wrapped with `worker::AsyncWorker`
   *  random worker factory function.
 
-* `workers_manager.cpp` includes a simple CLI program that starts random workers and allows us to control them via standard input.
+* [`workers_manager.cpp`](examples/workers_manager.cpp) includes a simple CLI program that starts random workers and allows us to control them via standard input.
 Depends on `Boost`.
 
 # Workers Manager CLI
