@@ -13,10 +13,10 @@ restarted and stopped. Implemented by wrapping `std::async` - but always run in 
 
 // all workers must accept worker::yield_function_t as first argument
 std::string dummy_worker(worker::yield_function_t yield, int loop_n, int sleep_ms) {
-    for (int i = 0; i < loop_n; ++i) {
+    for (auto i = 0; i < loop_n; ++i) {
         std::this_thread::sleep_for(std::chrono::milliseconds(sleep_ms));
 
-        double progress = i / static_cast<double>(loop_n); // worker's progress in 0-1 range
+        auto progress = i / static_cast<double>(loop_n); // worker's progress in 0-1 range
         bool keep_running = yield(progress); // worker yields execution to report progress & pause if needed
         if (!keep_running) { // worker should cleanly stop
             return "stopped";
