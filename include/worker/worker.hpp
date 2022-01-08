@@ -18,6 +18,7 @@ namespace worker {
     /**
      * Abstract base class for worker that can be paused, restarted and stopped.
      * Instances must be modified (paused, restarted, stopped) from a single thread.
+     * Worker should be waited on or stopped before destruction, unless implementing class states otherwise.
      */
     class BaseWorker {
     public:
@@ -28,7 +29,8 @@ namespace worker {
 
         /**
          * Pure virtual destructor declaration to mark an abstract class.
-         * Default implementation stops worker and waits till it stops/finishes cleanly.
+         * Worker isn't stopped or waited on in default implementation (noexcept).
+         * If worker is not stopped/finished on destruction, std::terminate is called.
          */
         virtual ~BaseWorker() = 0;
 
@@ -113,6 +115,7 @@ namespace worker {
     /**
      * Async worker that can be paused, restarted, stopped and returns result.
      * Implemented by wrapping std::async - always run in separate thread.
+     * Destructor will wait for worker to finish (see std::future destructor).
      * @tparam Function function type (see std::async). The main difference with std::async interface is
      *   that the function must accept yield function (yield_function_t) as it's first argument (see BaseWorker::yield).
      *   That is: function determines when it can yield execution by calling yield function inside it's own implementation.
@@ -167,10 +170,8 @@ namespace worker {
 
     // ******* Implementations ********************************************
     BaseWorker::~BaseWorker() {
-        try {
-            stop();
-        }
-        catch (std::logic_error&) { // swallow, worker already finished
+        if(!terminal_status()){
+            std::terminate();
         }
     }
 
