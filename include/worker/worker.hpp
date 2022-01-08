@@ -30,7 +30,7 @@ namespace worker {
         /**
          * Pure virtual destructor declaration to mark an abstract class.
          * Worker isn't stopped or waited on in default implementation (noexcept).
-         * If worker is not stopped/finished on destruction, std::terminate is called.
+         * If worker is not stopped/finished before destruction, std::terminate is called.
          */
         virtual ~BaseWorker() = 0;
 
