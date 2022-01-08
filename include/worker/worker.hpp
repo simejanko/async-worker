@@ -64,7 +64,7 @@ namespace worker {
         void restart();
 
         /**
-        * Stops worker (blocking call). AsyncWorker can't be restarted after it is stopped
+        * Stops worker (blocking call). Worker can't be restarted after it is stopped
         * @throws std::logic_error if worker has already finished it's work
         */
         void stop();
