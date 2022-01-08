@@ -39,8 +39,8 @@ namespace worker {
 
         BaseWorker& operator=(const BaseWorker& other) = delete;
 
-        /** Returns worker name (can be empty) */
-        [[nodiscard]] std::string name() const { return name_; }
+        /** Returns worker name (can be empty). Thread-safe. */
+        [[nodiscard]] std::string name() const noexcept { return name_; }
 
         /** Returns worker status (e.g. running, paused, ...). Thread-safe. */
         [[nodiscard]] Status status() const {
@@ -49,7 +49,7 @@ namespace worker {
         }
 
         /** Returns worker's progress, in the 0-1 range (0%-100%). Thread-safe. */
-        [[nodiscard]] double progress() const { return progress_; }
+        [[nodiscard]] double progress() const noexcept { return progress_; }
 
         /**
          * Pauses worker (blocking call)
@@ -100,7 +100,7 @@ namespace worker {
         /** Utility for checking terminal states (not thread safe) */
         bool terminal_status() const { return status_ == Status::STOPPED || status_ == Status::FINISHED; }
 
-        std::string name_;
+        const std::string name_;
         Status status_ = Status::RUNNING;
         std::atomic<double> progress_ = 0; // in percentages (0-1)
 
