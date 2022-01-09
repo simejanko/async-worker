@@ -104,7 +104,7 @@ namespace worker {
         Status status_ = Status::RUNNING;
         std::atomic<double> progress_ = 0; // in percentages (0-1)
 
-        std::optional<Status> status_change_; // scheduled status change
+        Status status_change_ = Status::RUNNING; // scheduled status change
         mutable std::mutex status_m_; // mutex for accessing worker status
         mutable std::condition_variable status_cv_; // conditional variable for changing worker status
     };
@@ -230,7 +230,6 @@ namespace worker {
 
         std::unique_lock<std::mutex> lock(status_m_);
         if (status_change_ == Status::PAUSED) {
-            status_change_.reset();
             status_ = Status::PAUSED;
             // notify of the status change
             status_cv_.notify_all();
