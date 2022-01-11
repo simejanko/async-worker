@@ -90,7 +90,7 @@ namespace worker {
      * Factory function that returns random BaseWorker instances with random arguments, based on implementations in this file
      * @throws std::logic_error if worker that's not yet implemented in the factory is selected
      */
-    std::shared_ptr<BaseWorker> random_worker() {
+    std::unique_ptr<BaseWorker> random_worker() {
         // sample a random worker function from WORKER_EXAMPLES
         std::random_device rd;
         std::mt19937 gen(rd());
@@ -100,12 +100,12 @@ namespace worker {
         if (worker_name == "dummy_worker") {
             std::uniform_int_distribution<int> loop_n_distr(200, 1000), sleep_ms_distr(10, 100);
             // unfortunately pointers and template deductions don't play nice
-            return std::make_shared<AsyncWorker<decltype(&dummy_worker), int, int>>(
+            return std::make_unique<AsyncWorker<decltype(&dummy_worker), int, int>>(
                     worker_name, &dummy_worker, loop_n_distr(gen), sleep_ms_distr(gen));
         }
         if (worker_name == "fibonacci_slow") {
             std::uniform_int_distribution<int> n_distr(35, 40);
-            return std::make_shared<AsyncWorker<decltype(&fibonacci_slow), int>>(
+            return std::make_unique<AsyncWorker<decltype(&fibonacci_slow), int>>(
                     worker_name, &fibonacci_slow, n_distr(gen));
         }
         if (worker_name == "selection_sort") {
@@ -121,14 +121,14 @@ namespace worker {
                         return vec_copy;
                     };
 
-            return std::make_shared<AsyncWorker<decltype(lambda)>>(worker_name, lambda);
+            return std::make_unique<AsyncWorker<decltype(lambda)>>(worker_name, lambda);
         }
 
         if (worker_name == "file_writer") {
             std::uniform_int_distribution<int> n_lines_distr(1e5, 1e6);
             std::uniform_int_distribution<int> line_length_distr(50, 150);
 
-            return std::make_shared<AsyncWorker<decltype(&file_writer), int, int>>(
+            return std::make_unique<AsyncWorker<decltype(&file_writer), int, int>>(
                     worker_name, &file_writer, n_lines_distr(gen), line_length_distr(gen));
         }
 
