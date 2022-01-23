@@ -116,9 +116,9 @@ namespace worker {
 
             // wrap selection sort with lambda that returns sorted copy
             auto lambda =
-                    [vec_copy = rand_vec](yield_function_t yield) mutable {
-                        selection_sort(yield, vec_copy.begin(), vec_copy.end());
-                        return vec_copy;
+                    [rand_vec = std::move(rand_vec)](yield_function_t yield) mutable {
+                        selection_sort(yield, rand_vec.begin(), rand_vec.end());
+                        return rand_vec;
                     };
 
             return std::make_unique<AsyncWorker<decltype(lambda)>>(worker_name, lambda);
