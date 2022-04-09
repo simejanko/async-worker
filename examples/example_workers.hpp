@@ -112,7 +112,7 @@ namespace worker {
             std::uniform_int_distribution<std::size_t> vec_size(20000, 150000);
             std::uniform_int_distribution<int> vec_distr(-1e5, 1e5);
             std::vector<int> rand_vec(vec_size(gen));
-            std::generate(rand_vec.begin(), rand_vec.end(), [&]() { return vec_distr(gen); });
+            std::generate(rand_vec.begin(), rand_vec.end(), [&vec_distr, &gen]() { return vec_distr(gen); });
 
             // wrap selection sort with lambda that returns sorted copy
             auto lambda =
